@@ -7,6 +7,7 @@ import json
 import requests
 import uuid
 from collections import OrderedDict
+import re
 
 try:
         STR_TYPES = [str, unicode] #Py2
@@ -15,7 +16,7 @@ except:
 
 
 FLAGS = {
-	"crawl": {"prop": "crawl", "default": False, 
+	"crawl": {"prop": "crawl", "default": False,
 		"description": "NOT YET IMPLEMENTED. Crawl to linked resources, such as AnnotationLists from a Manifest"},
 	"desc_2_md": {"prop": "description_is_metadata", "default": True,
 		"description": "If true, then the source's `description` properties will be put into a `metadata` pair.\
@@ -35,13 +36,15 @@ FLAGS = {
     "attribution_label": {"prop": "attribution_label", "default": "Attribution",
     	"description": "The label to use for requiredStatement mapping from attribution"},
     "license_label": {"prop": "license_label", "default": "Rights/License",
-    	"description": "The label to use for non-conforming license URIs mapped into metadata"}
+    	"description": "The label to use for non-conforming license URIs mapped into metadata"},
+    "canvas_as_thumbs": {"prop": "canvas_as_thumbs", "default": False,
+        "description": "Use canvas image for thumbnails"}
 }
 
-KEY_ORDER = ["@context", "id", "@id", "type", "@type", "motivation", "label", "profile", 
+KEY_ORDER = ["@context", "id", "@id", "type", "@type", "motivation", "label", "profile",
 	"format", "language", "value", "metadata", "requiredStatement", "thumbnail",
-	"homepage", "logo", "rights", "logo", "height", "width", "start", 
-	"viewingDirection", "behavior", "navDate", "rendering", "seeAlso", 
+	"homepage", "logo", "rights", "logo", "height", "width", "start",
+	"viewingDirection", "behavior", "navDate", "rendering", "seeAlso",
 	"partOf",  "includes", "items", "structures", "annotations"]
 KEY_ORDER_HASH = dict([(KEY_ORDER[x], x) for x in range(len(KEY_ORDER))])
 
@@ -326,7 +329,7 @@ class Upgrader(object):
 					what['type'] = data['type']
 				elif '@type' in data:
 					data = self.fix_type(data)
-					what['type'] = data['type']		
+					what['type'] = data['type']
 
 	def fix_object(self, what, typ):
 		if type(what) != dict:
@@ -413,9 +416,9 @@ class Upgrader(object):
 					l = l['@id']
 				if not done and (l.find('creativecommons.org/') >-1 or l.find('rightsstatements.org/') > -1):
 					# match
-					what['rights'] = l	
+					what['rights'] = l
 					done = True
-				else:				
+				else:
 					# fix_languages below will correct these to langMaps
 					licstmt = {"label": self.license_label, "value": l}
 					md = what.get('metadata', [])
@@ -433,7 +436,7 @@ class Upgrader(object):
 				what['behavior'] = what['viewingHint']
 			else:
 				# will already be a list
-				if type(what['viewingHint']) == list:					
+				if type(what['viewingHint']) == list:
 					what['behavior'].extend(what['viewingHint'])
 				else:
 					what['behavior'].append(what['viewingHint'])
@@ -647,12 +650,20 @@ class Upgrader(object):
 		# XXX process otherContent here before generic grabs it
 
 		what = self.process_generic(what)
+		iiif_im = re.compile(r"^(http|https)://([^/]+)/(.*)/(full|square|[0-9,]+|pct:[0-9,]+)/full")
 
 		if 'images' in what:
 			newl = {'type': 'AnnotationPage', 'items': []}
 			for anno in what['images']:
 				newl['items'].append(anno)
 			what['items'] = [newl]
+			if self.canvas_as_thumbs:
+                          mat = iiif_im.match(what['images'][0]['resource']['@id'])
+                          thumb_url = "%s://%s/%s/full/80,100/0/default.jpg" % (mat.group(1), mat.group(2), mat.group(3))
+
+                          thumb_id = "%s://%s/%s" % (mat.group(1), mat.group(2), mat.group(3))
+
+                          what['thumbnail'] = [ {"@id" : thumb_url, "type": "Image", "service": [ { "id": thumb_id, "type": "ImageService2", "profile": "level1" } ] } ]
 			del what['images']
 		return what
 
