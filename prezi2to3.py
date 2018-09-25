@@ -23,10 +23,10 @@ if __name__ == "__main__":
         name=key
         description=FLAGS[key]['description']
         default=FLAGS[key]['default']
-        type=type(default)
-        if FLAGS[key]['default'] is not str:
-            type=bool
-        parser.add_argument('--%s' % name, default=default, type=type, help=description)
+        arg_type=type(default)
+        if not isinstance(FLAGS[key]['default'], str):
+            arg_type=bool
+        parser.add_argument('--%s' % name, default=default, type=arg_type, help=description)
 
 
     args = parser.parse_args()
